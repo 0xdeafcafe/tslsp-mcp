@@ -44,15 +44,15 @@ claude won't reach for an MCP tool just because it exists. you have to tell it. 
 When working in a TypeScript/JavaScript project that has a tsconfig.json,
 prefer the tslsp MCP tools over text-based alternatives:
 
-- Finding usages of a symbol ➡️ tslsp:references, not Grep.
-- Renaming a function/class/variable ➡️ tslsp:rename. Don't do
+- Finding usages of a symbol -> tslsp:references, not Grep.
+- Renaming a function/class/variable -> tslsp:rename. Don't do
   find-and-replace edits for renames. Use dry_run: true first if
   the symbol has many call sites.
-- "Where is X defined?" ➡️ tslsp:definition, not Grep.
-- Type signature / docstring of a symbol ➡️ tslsp:hover.
-- Outline of a file before reading the whole thing ➡️ tslsp:outline.
-- Searching for a symbol by name ➡️ tslsp:find_symbol, not Grep.
-- Type errors after editing ➡️ tslsp:diagnostics.
+- "Where is X defined?" -> tslsp:definition, not Grep.
+- Type signature / docstring of a symbol -> tslsp:hover.
+- Outline of a file before reading the whole thing -> tslsp:outline.
+- Searching for a symbol by name -> tslsp:find_symbol, not Grep.
+- Type errors after editing -> tslsp:diagnostics.
 
 Position-taking tools accept { symbol: "name" } if you don't have a
 position handy, the MCP resolves it via workspace symbol search.
