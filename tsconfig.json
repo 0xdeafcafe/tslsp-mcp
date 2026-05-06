@@ -9,6 +9,7 @@
     "noUncheckedIndexedAccess": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
+    "types": ["node"],
     "declaration": false,
     "sourceMap": true,
     "resolveJsonModule": true
