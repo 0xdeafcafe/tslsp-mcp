@@ -7,7 +7,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  id-token: write # for npm provenance
+  id-token: write # for npm trusted publishing (OIDC) + provenance
 
 concurrency:
   group: release-${{ github.ref }}
@@ -52,7 +52,9 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # No NPM_TOKEN: npm trusted publishing (OIDC) issues a short-lived
+      # credential from the id-token JWT. Configure the trusted publisher
+      # for `tslsp-mcp` at https://www.npmjs.com/package/tslsp-mcp/access
+      # → "Trusted Publisher" → GitHub Actions → workflow `release.yml`.
       - name: Publish
         run: pnpm publish --access public --no-git-checks --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
