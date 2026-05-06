@@ -1,6 +1,6 @@
 {
   "name": "tslsp-mcp",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "MCP server exposing the TypeScript language server (tsgo) — rename, references, definitions, hover, symbols, diagnostics.",
   "type": "module",
   "bin": {
@@ -30,7 +30,7 @@
     "vitest": "^4.1.5"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "packageManager": "pnpm@10.29.3"
 }

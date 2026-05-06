@@ -1,5 +1,9 @@
 # tslsp-mcp
 
+[![npm](https://img.shields.io/npm/v/tslsp-mcp.svg?logo=npm&label=npm)](https://www.npmjs.com/package/tslsp-mcp)
+[![CI](https://github.com/0xdeafcafe/tslsp-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/0xdeafcafe/tslsp-mcp/actions/workflows/ci.yml)
+[![node](https://img.shields.io/node/v/tslsp-mcp.svg?logo=node.js)](https://github.com/0xdeafcafe/tslsp-mcp/blob/main/package.json)
+
 claude finds references by grepping. claude renames things by find-and-replacing. this is fine until your symbol is called `User` or `get` or `value`, at which point it confidently rewrites half your codebase and tells you it's done. thanks, gas-lightyear.
 
 how do real editors function? they ask the typescript language server, which actually understands what's a reference vs what's just a string. `tslsp-mcp` gives claude that same superpower over an MCP API. rename is type-aware. references are real references. find-symbol is the LSP's symbol index, not a regex. if claude wants to know a document outline, it can get a full outline via the LSP, rather than having to randomly read chunks of the file. token waste shit.
@@ -10,7 +14,7 @@ designed in my head, built by claudus, tested on your codebase, cheers.
 
 ## you need
 
-- node 20+
+- node 22+
 - [pnpm](https://pnpm.io/) (or use `corepack enable` so node hands you the right version)
 - a typescript project (anything with a `tsconfig.json`)
 - [claude code](https://claude.com/claude-code), or any other MCP host
