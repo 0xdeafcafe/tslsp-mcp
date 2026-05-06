@@ -1,0 +1,17 @@
+node_modules/
+dist/
+coverage/
+.vitest-cache/
+.DS_Store
+*.log
+.env
+.env.local
+.env.*.local
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# probe sandbox state - generated locally
+probe/node_modules/
+probe/package-lock.json

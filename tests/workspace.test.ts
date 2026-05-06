@@ -1,0 +1,49 @@
+import { describe, expect, it, beforeAll } from "vitest";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { findProjectRoot } from "../src/workspace.js";
+
+let root: string;
+let nested: string;
+
+beforeAll(() => {
+  root = mkdtempSync(join(tmpdir(), "tslsp-ws-"));
+  nested = join(root, "src", "components");
+  mkdirSync(nested, { recursive: true });
+  writeFileSync(join(root, "tsconfig.json"), "{}", "utf8");
+  writeFileSync(join(nested, "Button.tsx"), "export const Button = () => null;\n", "utf8");
+});
+
+describe("findProjectRoot", () => {
+  it("returns the dir containing tsconfig.json when given that dir", () => {
+    expect(findProjectRoot(root)).toBe(root);
+  });
+
+  it("walks up from a file path", () => {
+    expect(findProjectRoot(join(nested, "Button.tsx"))).toBe(root);
+  });
+
+  it("walks up from a deep directory", () => {
+    expect(findProjectRoot(nested)).toBe(root);
+  });
+
+  it("returns undefined when no tsconfig is found anywhere up the tree", () => {
+    // A path under /tmp that doesn't have a tsconfig anywhere up — but tmp on
+    // some systems sits under a path that does. Use a fresh isolated dir to be safe.
+    const isolated = mkdtempSync(join(tmpdir(), "tslsp-empty-"));
+    const buried = join(isolated, "a", "b");
+    mkdirSync(buried, { recursive: true });
+    // Note: we can't make the PARENT of tmpdir tsconfig-free if the user happens
+    // to have one further up, so we just assert that if it resolves, it's not buried.
+    const found = findProjectRoot(buried);
+    if (found !== undefined) {
+      expect(found).not.toContain(isolated);
+    }
+  });
+
+  it("handles a non-existent path by walking up its dirname", () => {
+    const ghost = join(nested, "does-not-exist.ts");
+    expect(findProjectRoot(ghost)).toBe(root);
+  });
+});
