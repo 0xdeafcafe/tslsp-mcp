@@ -3,6 +3,10 @@ name: Release
 on:
   push:
     branches: [main]
+  # Manual trigger: re-publishes the current package.json version using
+  # trusted publishing. Useful when a publish failed and the release-please
+  # PR was already merged (so a normal push won't open a new release).
+  workflow_dispatch: {}
 
 permissions:
   contents: write
@@ -30,7 +34,7 @@ jobs:
   publish:
     name: publish to npm
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    if: ${{ needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
