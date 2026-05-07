@@ -20,6 +20,10 @@ concurrency:
 jobs:
   release-please:
     name: release-please
+    # Manual dispatch is for re-publishing the current package version; we
+    # don't need release-please to run in that case (and its GitHub API
+    # calls flake periodically, which would block the publish job).
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
@@ -34,7 +38,13 @@ jobs:
   publish:
     name: publish to npm
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
+    # Run if release-please cut a release, OR if this was a manual dispatch
+    # (in which case release-please was skipped). `always()` is required so
+    # this `if` evaluates even when the upstream job didn't run.
+    if: |
+      always() &&
+      (needs.release-please.outputs.release_created == 'true' ||
+       github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -57,8 +67,7 @@ jobs:
         run: pnpm test
 
       # No NPM_TOKEN: npm trusted publishing (OIDC) issues a short-lived
-      # credential from the id-token JWT. Configure the trusted publisher
-      # for `tslsp-mcp` at https://www.npmjs.com/package/tslsp-mcp/access
-      # → "Trusted Publisher" → GitHub Actions → workflow `release.yml`.
+      # credential from the id-token JWT. Trusted publisher is configured at
+      # https://www.npmjs.com/package/@0xdeafcafe/tslsp-mcp/access
       - name: Publish
         run: pnpm publish --access public --no-git-checks --provenance
