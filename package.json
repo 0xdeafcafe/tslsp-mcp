@@ -3,6 +3,26 @@
   "version": "0.0.1",
   "description": "MCP server exposing the TypeScript language server (tsgo) — rename, references, definitions, hover, symbols, diagnostics.",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0xdeafcafe/tslsp-mcp.git"
+  },
+  "homepage": "https://github.com/0xdeafcafe/tslsp-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/0xdeafcafe/tslsp-mcp/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "typescript",
+    "tsgo",
+    "lsp",
+    "claude",
+    "claude-code",
+    "rename",
+    "refactor"
+  ],
+  "license": "MIT",
   "bin": {
     "tslsp-mcp": "dist/index.js"
   },
