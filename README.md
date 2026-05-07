@@ -21,22 +21,23 @@ designed in my head, built by claudus, tested on your codebase, cheers.
 
 ## install
 
-clone and build:
+easiest path - register with claude code, let `npx` fetch the latest from npm on every run:
+
+```bash
+claude mcp add -s user tslsp -- npx -y @0xdeafcafe/tslsp-mcp
+```
+
+`-s user` makes it available in every project. drop it (and run from a project dir) if you'd rather scope to one repo.
+
+prefer to run from source? clone, build, point claude at the built file:
 
 ```bash
 git clone https://github.com/0xdeafcafe/tslsp-mcp.git
 cd tslsp-mcp
 pnpm install
 pnpm run build
-```
-
-then register it with claude code (user-scope so every project gets it):
-
-```bash
 claude mcp add -s user tslsp node /absolute/path/to/tslsp-mcp/dist/index.js
 ```
-
-drop `-s user` and run from a project dir if you'd rather scope it to one repo.
 
 ## make claude actually use it
 
