@@ -74,12 +74,18 @@ jobs:
       # only the npm CLI (>=11.5.1) performs the OIDC token exchange against
       # the npm registry. pnpm signs provenance fine but doesn't currently
       # do the trusted-publishing auth exchange.
-      - name: Ensure npm >= 11.5.1
-        # `--force` bypasses an in-place self-upgrade bug (npm 10 -> 11
-        # leaves `promise-retry` unresolved in @npmcli/arborist).
+      # npm CLI 11.5.1+ is required for OIDC trusted publishing. Self-
+      # upgrading the bundled npm in-place is buggy (it half-clobbers its
+      # own deps mid-install), so install into an isolated prefix and put
+      # that ahead on PATH for the publish step.
+      - name: Install npm CLI for OIDC publish
         run: |
-          npm install --global --force npm@latest
-          npm --version
+          mkdir -p "$RUNNER_TEMP/npm-cli"
+          npm install --prefix "$RUNNER_TEMP/npm-cli" --no-save --no-audit --no-fund npm@latest
+          echo "$RUNNER_TEMP/npm-cli/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Verify npm version
+        run: npm --version
 
       - name: Publish
         run: npm publish --access public --provenance
