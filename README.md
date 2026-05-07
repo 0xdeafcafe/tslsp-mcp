@@ -41,29 +41,49 @@ claude mcp add -s user tslsp node /absolute/path/to/tslsp-mcp/dist/index.js
 
 ## make claude actually use it
 
-claude won't reach for an MCP tool just because it exists. you have to tell it. paste this into `~/.claude/CLAUDE.md` (or a project's `CLAUDE.md`):
+claude won't reach for an MCP tool just because it exists. you have to tell it, and you have to be explicit about which built-in tool it replaces. paste this into `~/.claude/CLAUDE.md` (or a project's `CLAUDE.md`):
 
 ```markdown
 ## TypeScript code intelligence (tslsp MCP)
 
-When working in a TypeScript/JavaScript project that has a tsconfig.json,
-prefer the tslsp MCP tools over text-based alternatives:
+In any TypeScript or JavaScript project that has a `tsconfig.json`, the
+`tslsp` MCP is type-aware and MUST be used instead of the built-in text
+tools for the operations below. The built-in tools see strings; tslsp
+sees the program.
 
-- Finding usages of a symbol -> tslsp:references, not Grep.
-- Renaming a function/class/variable -> tslsp:rename. Don't do
-  find-and-replace edits for renames. Use dry_run: true first if
-  the symbol has many call sites.
-- "Where is X defined?" -> tslsp:definition, not Grep.
-- Type signature / docstring of a symbol -> tslsp:hover.
-- Outline of a file before reading the whole thing -> tslsp:outline.
-- Searching for a symbol by name -> tslsp:find_symbol, not Grep.
-- Type errors after editing -> tslsp:diagnostics.
+| Task                          | DO use                | DO NOT use      |
+| ----------------------------- | --------------------- | --------------- |
+| Find every usage of a symbol  | `tslsp:references`    | `Grep`, `Glob`  |
+| Search for a symbol by name   | `tslsp:find_symbol`   | `Grep`          |
+| Jump to a definition          | `tslsp:definition`    | `Grep` + `Read` |
+| Rename a symbol               | `tslsp:rename`        | `Edit`, `MultiEdit`, find-and-replace |
+| Get a symbol's type / JSDoc   | `tslsp:hover`         | `Read` |
+| Outline a file before diving  | `tslsp:outline`       | `Read` on the whole file |
+| Type errors after an edit     | `tslsp:diagnostics`   | `Bash` running `tsc` ad-hoc |
 
-Position-taking tools accept { symbol: "name" } if you don't have a
-position handy, the MCP resolves it via workspace symbol search.
+Hard rules:
 
-Fall back to Grep for genuine text search (string literals, comments,
-non-TS files) or projects with no tsconfig.json.
+1. NEVER rename a TypeScript identifier with `Edit` or `MultiEdit`. Use
+   `tslsp:rename`. Pass `dry_run: true` first when the symbol has many
+   call sites; review the preview, then apply.
+2. NEVER `Grep` for a symbol name to find usages or definitions. Use
+   `tslsp:references` or `tslsp:definition`. Grep matches strings in
+   comments, in unrelated identifiers, in `.md` files - it lies.
+3. Before reading a large file, call `tslsp:outline` first and use the
+   line numbers to `Read` only the slices you need. Do not page through
+   100s of lines hunting for a function.
+4. After non-trivial edits to a TS file, call `tslsp:diagnostics` on it
+   to confirm it still type-checks before claiming the change is done.
+
+Locator ergonomics: every position-taking tool accepts
+`{ symbol: "name" }` (workspace search), `{ file, line, symbol }` (line
+scan), or full `{ file, line, character }`. Use the cheapest form you
+have. Ambiguous name-only queries return the candidate list; pick by
+file or line and re-call.
+
+Fall back to the built-in text tools ONLY for: string literals,
+comments, non-TS files (Markdown, YAML, configs), or projects without a
+`tsconfig.json`.
 ```
 
 ## tools
