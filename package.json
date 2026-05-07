@@ -1,5 +1,5 @@
 {
-  "name": "tslsp-mcp",
+  "name": "@0xdeafcafe/tslsp-mcp",
   "version": "0.0.1",
   "description": "MCP server exposing the TypeScript language server (tsgo) — rename, references, definitions, hover, symbols, diagnostics.",
   "type": "module",

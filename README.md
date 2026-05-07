@@ -1,8 +1,8 @@
 # tslsp-mcp
 
-[![npm](https://img.shields.io/npm/v/tslsp-mcp.svg?logo=npm&label=npm)](https://www.npmjs.com/package/tslsp-mcp)
+[![npm](https://img.shields.io/npm/v/@0xdeafcafe/tslsp-mcp.svg?logo=npm&label=npm)](https://www.npmjs.com/package/@0xdeafcafe/tslsp-mcp)
 [![CI](https://github.com/0xdeafcafe/tslsp-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/0xdeafcafe/tslsp-mcp/actions/workflows/ci.yml)
-[![node](https://img.shields.io/node/v/tslsp-mcp.svg?logo=node.js)](https://github.com/0xdeafcafe/tslsp-mcp/blob/main/package.json)
+[![node](https://img.shields.io/node/v/@0xdeafcafe/tslsp-mcp.svg?logo=node.js)](https://github.com/0xdeafcafe/tslsp-mcp/blob/main/package.json)
 
 claude finds references by grepping. claude renames things by find-and-replacing. this is fine until your symbol is called `User` or `get` or `value`, at which point it confidently rewrites half your codebase and tells you it's done. thanks, gas-lightyear.
 

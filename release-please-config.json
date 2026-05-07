@@ -9,7 +9,7 @@
   "prerelease": false,
   "packages": {
     ".": {
-      "package-name": "tslsp-mcp",
+      "package-name": "@0xdeafcafe/tslsp-mcp",
       "changelog-path": "CHANGELOG.md"
     }
   }
