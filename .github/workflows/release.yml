@@ -69,5 +69,13 @@ jobs:
       # No NPM_TOKEN: npm trusted publishing (OIDC) issues a short-lived
       # credential from the id-token JWT. Trusted publisher is configured at
       # https://www.npmjs.com/package/@0xdeafcafe/tslsp-mcp/access
+      #
+      # Use `npm publish` (not `pnpm publish`) for the actual publish step:
+      # only the npm CLI (>=11.5.1) performs the OIDC token exchange against
+      # the npm registry. pnpm signs provenance fine but doesn't currently
+      # do the trusted-publishing auth exchange.
+      - name: Ensure npm >= 11.5.1
+        run: npm install --global npm@latest
+
       - name: Publish
-        run: pnpm publish --access public --no-git-checks --provenance
+        run: npm publish --access public --provenance
