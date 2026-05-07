@@ -75,7 +75,11 @@ jobs:
       # the npm registry. pnpm signs provenance fine but doesn't currently
       # do the trusted-publishing auth exchange.
       - name: Ensure npm >= 11.5.1
-        run: npm install --global npm@latest
+        # `--force` bypasses an in-place self-upgrade bug (npm 10 -> 11
+        # leaves `promise-retry` unresolved in @npmcli/arborist).
+        run: |
+          npm install --global --force npm@latest
+          npm --version
 
       - name: Publish
         run: npm publish --access public --provenance
