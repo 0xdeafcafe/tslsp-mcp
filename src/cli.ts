@@ -66,16 +66,38 @@ async function runTool(tool: ToolDef, argv: string[]): Promise<number> {
     return 2;
   }
 
+  // Validate against the tool's zod schema so CLI users get the same
+  // constraint checks as MCP clients (e.g. `.min(1)`, `.positive()`,
+  // `.max(200)`). Without this the CLI path silently bypassed them.
+  let validated: Record<string, unknown>;
+  try {
+    const schema = z.object(tool.inputSchema as z.ZodRawShape);
+    validated = schema.parse(parsed) as Record<string, unknown>;
+  } catch (e) {
+    const msg = e instanceof z.ZodError ? formatZodError(e) : (e as Error).message;
+    process.stderr.write(`${msg}\n\n${toolHelp(tool)}\n`);
+    return 2;
+  }
+
   const log = VERBOSE ? (line: string) => process.stderr.write(line + "\n") : undefined;
   const pool = new LspPool(log);
   try {
-    const out = await tool.handler(parsed as any, { pool, cwd: process.cwd() });
+    const out = await tool.handler(validated as any, { pool, cwd: process.cwd() });
     const stream = out.isError ? process.stderr : process.stdout;
     stream.write(out.text + (out.text.endsWith("\n") ? "" : "\n"));
     return out.isError ? 1 : 0;
   } finally {
     await pool.disposeAll();
   }
+}
+
+function formatZodError(e: z.ZodError): string {
+  return e.issues
+    .map((iss) => {
+      const path = iss.path.length ? iss.path.join(".") : "<arg>";
+      return `invalid --${String(path).replace(/_/g, "-")}: ${iss.message}`;
+    })
+    .join("\n");
 }
 
 // --- help ---

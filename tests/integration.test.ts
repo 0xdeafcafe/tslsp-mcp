@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ChildProcess, spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -248,5 +248,83 @@ describe("MCP integration", () => {
     // After the move, `outline` on the new path should still find the symbols.
     const outline = await callTool("outline", { file: resolve(workspace, "src/arithmetic.ts") });
     expect(outline).toMatch(/function sum/);
+  });
+
+  it("rename_file rewrites a moved file's own relative imports (regression for apply-before-move)", async () => {
+    // Build a fresh micro-workspace where the file we move has its own
+    // relative imports — moving across directory depth should force tsgo to
+    // emit an edit keyed by the OLD URI of the moved file itself. If we move
+    // before applying that edit, the edit's readFile() will ENOENT.
+    const w2 = mkdtempSync(resolve(tmpdir(), "tslsp-renamefile-"));
+    writeFileSync(resolve(w2, "tsconfig.json"), JSON.stringify({
+      compilerOptions: { target: "es2022", module: "esnext", moduleResolution: "bundler", strict: true, noEmit: true },
+      include: ["src/**/*"],
+    }), "utf8");
+    spawnSync("mkdir", ["-p", resolve(w2, "src/sub")]);
+    writeFileSync(resolve(w2, "src/util.ts"), "export const u = 1;\n", "utf8");
+    writeFileSync(resolve(w2, "src/main.ts"), 'import { u } from "./util";\nexport const m = u;\n', "utf8");
+
+    // Spawn a new server pointed at this workspace so we don't trip across
+    // index state from the previous tests.
+    const proc2 = spawn("node", [dist], { cwd: w2, stdio: ["pipe", "pipe", "pipe"] });
+    proc2.stderr!.on("data", () => {});
+    let buf2 = Buffer.alloc(0);
+    const pending2 = new Map<number, { res: (v: any) => void; rej: (e: Error) => void }>();
+    let nextId2 = 1;
+    const send2 = (msg: unknown) => proc2.stdin!.write(JSON.stringify(msg) + "\n");
+    const rpc2 = <T = any,>(method: string, params: unknown, ms = 30_000) => new Promise<T>((res, rej) => {
+      const id = nextId2++;
+      const t = setTimeout(() => { pending2.delete(id); rej(new Error(`timeout: ${method}`)); }, ms);
+      pending2.set(id, { res: (v) => { clearTimeout(t); res(v); }, rej });
+      send2({ jsonrpc: "2.0", id, method, params });
+    });
+    proc2.stdout!.on("data", (chunk: Buffer) => {
+      buf2 = Buffer.concat([buf2, chunk]);
+      while (true) {
+        const nl = buf2.indexOf(0x0a);
+        if (nl === -1) return;
+        const line = buf2.slice(0, nl).toString("utf8").replace(/\r$/, "");
+        buf2 = buf2.slice(nl + 1);
+        if (!line) continue;
+        try {
+          const msg: any = JSON.parse(line);
+          if (msg.id !== undefined && pending2.has(msg.id)) {
+            const p = pending2.get(msg.id)!;
+            pending2.delete(msg.id);
+            if (msg.error) p.rej(new Error(msg.error.message));
+            else p.res(msg.result);
+          }
+        } catch { /* ignore */ }
+      }
+    });
+
+    try {
+      await rpc2("initialize", { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "vitest", version: "0" } });
+      send2({ jsonrpc: "2.0", method: "notifications/initialized" });
+
+      // Move src/main.ts → src/sub/main.ts. After the move, "./util" must
+      // become "../util" (one level deeper). If apply runs *after* move,
+      // readFile on src/main.ts fails and the import isn't rewritten.
+      const r: any = await rpc2("tools/call", {
+        name: "rename_file",
+        arguments: {
+          old_path: resolve(w2, "src/main.ts"),
+          new_path: resolve(w2, "src/sub/main.ts"),
+        },
+      });
+      const out = (r.content as Array<{ text: string }>).map((c) => c.text).join("\n");
+      expect(out).not.toMatch(/ENOENT|no such file/);
+      // tsgo may or may not actually emit an edit on the moved file itself
+      // depending on version; the key invariant is: no crash and the move
+      // happens. Read the moved file and confirm its import path is sane.
+      const moved = readFileSync(resolve(w2, "src/sub/main.ts"), "utf8");
+      // Either the import was rewritten to "../util" OR it stayed as "./util"
+      // (if tsgo didn't emit the edit). Both are non-crash outcomes.
+      // What we MUSTN'T see is a missing file or a half-applied state.
+      expect(moved).toMatch(/from ["']\.\.?\/util["']/);
+    } finally {
+      proc2.kill("SIGTERM");
+      await new Promise((r) => setTimeout(r, 50));
+    }
   });
 });

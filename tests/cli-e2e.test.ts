@@ -194,4 +194,26 @@ describe("CLI e2e", () => {
     expect(code).toBe(0);
     expect(stdout).toMatch(/already installed/);
   });
+
+  it("rejects schema-violating args (--limit 0 fails .positive())", async () => {
+    const { code, stderr } = await runCli(["find-symbol", "add", "--limit", "0"]);
+    expect(code).toBe(2);
+    expect(stderr).toMatch(/invalid --limit/);
+  });
+
+  it("rejects schema-violating args (--apply -1 fails .nonnegative())", async () => {
+    const { code, stderr } = await runCli([
+      "code-action",
+      "--file", resolve(workspace, "src/math.ts"),
+      "--apply", "-1",
+    ]);
+    expect(code).toBe(2);
+    expect(stderr).toMatch(/invalid --apply/);
+  });
+
+  it("rejects empty string arg (--new-name '' fails .min(1))", async () => {
+    const { code, stderr } = await runCli(["rename", "--symbol", "add", "--new-name", ""]);
+    expect(code).toBe(2);
+    expect(stderr).toMatch(/invalid --new-name/);
+  });
 });

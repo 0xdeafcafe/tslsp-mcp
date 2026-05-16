@@ -129,8 +129,14 @@ export async function performFileRename(
     };
   }
 
-  await moveOnDisk(oldPath, newPath);
+  // CRITICAL: apply the WorkspaceEdit BEFORE moving files. The edit's URIs
+  // refer to the pre-rename state; for a moved file with internal relative
+  // imports tsgo emits edits keyed by the OLD URI. Reading that URI after a
+  // move would ENOENT, leaving the rename half-done. Applying first writes
+  // the post-move content into the file at its current (old) path; the move
+  // then carries the already-updated content to its destination.
   if (edit) await applyWorkspaceEdit(client, edit, root);
+  await moveOnDisk(oldPath, newPath);
   await client.filesRenamedOnDisk(renames);
 
   return {
