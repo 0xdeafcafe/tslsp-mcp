@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { registerTools } from "./tools.js";
+import { registerTools } from "./mcp.js";
 import { LspPool } from "./workspace.js";
 
 const VERBOSE = process.env.TSLSP_MCP_VERBOSE === "1";
@@ -14,7 +14,7 @@ async function main() {
     { name: "tslsp-mcp", version: "0.1.0" },
     { capabilities: { tools: {} } },
   );
-  registerTools(server, pool);
+  registerTools(server, { pool, cwd: process.cwd() });
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

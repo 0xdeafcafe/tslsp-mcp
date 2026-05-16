@@ -60,6 +60,42 @@ export interface Hover {
   range?: Range;
 }
 
+export interface CallHierarchyItem {
+  name: string;
+  kind: number;
+  detail?: string;
+  uri: string;
+  range: Range;
+  selectionRange: Range;
+  data?: unknown;
+}
+
+export interface CallHierarchyIncomingCall {
+  from: CallHierarchyItem;
+  fromRanges: Range[];
+}
+
+export interface CallHierarchyOutgoingCall {
+  to: CallHierarchyItem;
+  fromRanges: Range[];
+}
+
+export interface CodeAction {
+  title: string;
+  kind?: string;
+  diagnostics?: Diagnostic[];
+  isPreferred?: boolean;
+  edit?: WorkspaceEdit;
+  command?: { title: string; command: string; arguments?: unknown[] };
+}
+
+export interface FileRename {
+  oldUri: string;
+  newUri: string;
+}
+
+export type ServerCapabilities = Record<string, unknown>;
+
 interface PendingRequest {
   resolve: (v: unknown) => void;
   reject: (e: Error) => void;
@@ -85,6 +121,7 @@ export class LspClient {
   private projectSeeded = false;
   private closed = false;
   private log: (line: string) => void;
+  private serverCaps: ServerCapabilities = {};
 
   constructor(private opts: LspClientOptions) {
     this.log = opts.log ?? (() => {});
@@ -108,7 +145,7 @@ export class LspClient {
 
   private async handshake(): Promise<void> {
     const rootUri = pathToFileURL(this.opts.rootPath).toString();
-    await this.request("initialize", {
+    const init = await this.request<{ capabilities?: ServerCapabilities }>("initialize", {
       processId: process.pid,
       rootUri,
       capabilities: {
@@ -117,19 +154,49 @@ export class LspClient {
           references: {},
           definition: { linkSupport: false },
           implementation: { linkSupport: false },
+          typeDefinition: { linkSupport: false },
           hover: { contentFormat: ["markdown", "plaintext"] },
           documentSymbol: { hierarchicalDocumentSymbolSupport: true },
+          callHierarchy: { dynamicRegistration: false },
+          codeAction: {
+            codeActionLiteralSupport: {
+              codeActionKind: {
+                valueSet: [
+                  "",
+                  "quickfix",
+                  "refactor",
+                  "refactor.extract",
+                  "refactor.inline",
+                  "refactor.rewrite",
+                  "source",
+                  "source.organizeImports",
+                  "source.fixAll",
+                ],
+              },
+            },
+            resolveSupport: { properties: ["edit"] },
+          },
           publishDiagnostics: { relatedInformation: false },
         },
         workspace: {
           symbol: {},
           workspaceFolders: true,
           didChangeWatchedFiles: { dynamicRegistration: true },
+          fileOperations: {
+            willRename: true,
+            didRename: true,
+          },
+          applyEdit: true,
         },
       },
       workspaceFolders: [{ uri: rootUri, name: "root" }],
     });
+    this.serverCaps = init?.capabilities ?? {};
     this.notify("initialized", {});
+  }
+
+  capabilities(): ServerCapabilities {
+    return this.serverCaps;
   }
 
   private send(msg: unknown): void {
@@ -228,6 +295,27 @@ export class LspClient {
     });
     this.opened.set(uri, { mtimeMs: st.mtimeMs, version });
     return uri;
+  }
+
+  /**
+   * Notify the server that files moved on disk and that any open documents at
+   * the old URIs are closed. Used by file/folder rename.
+   */
+  async filesRenamedOnDisk(renames: FileRename[]): Promise<void> {
+    for (const { oldUri } of renames) {
+      if (this.opened.has(oldUri)) {
+        this.notify("textDocument/didClose", { textDocument: { uri: oldUri } });
+        this.opened.delete(oldUri);
+      }
+    }
+    this.notify("workspace/didRenameFiles", { files: renames });
+    this.notify("workspace/didChangeWatchedFiles", {
+      changes: [
+        ...renames.map((r) => ({ uri: r.oldUri, type: 3 /* Deleted */ })),
+        ...renames.map((r) => ({ uri: r.newUri, type: 1 /* Created */ })),
+      ],
+    });
+    await new Promise((r) => setTimeout(r, 300));
   }
 
   /**

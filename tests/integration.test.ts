@@ -134,17 +134,22 @@ afterAll(async () => {
 });
 
 describe("MCP integration", () => {
-  it("exposes the seven tools", async () => {
+  it("exposes the expected tools", async () => {
     const list: any = await rpc("tools/list", {});
     const names = list.tools.map((t: { name: string }) => t.name).sort();
     expect(names).toEqual([
+      "call_hierarchy",
+      "code_action",
       "definition",
       "diagnostics",
       "find_symbol",
       "hover",
+      "implementation",
       "outline",
       "references",
       "rename",
+      "rename_file",
+      "type_definition",
     ]);
   });
 
@@ -194,7 +199,7 @@ describe("MCP integration", () => {
       new_name: "sum",
       dry_run: true,
     });
-    expect(out).toMatch(/preview.*4 sites.*2 files/);
+    expect(out).toMatch(/preview.*4 sites in 2 files/);
     // confirm files are unchanged
     const after = await callTool("references", { symbol: "add" });
     expect(after.match(/src\/(math|index)\.ts/g)?.length).toBe(4);
@@ -202,8 +207,46 @@ describe("MCP integration", () => {
 
   it("rename apply changes 4 sites and references reflect the new name", async () => {
     const out = await callTool("rename", { symbol: "add", new_name: "sum" });
-    expect(out).toMatch(/changed 4 sites across 2 files/);
+    expect(out).toMatch(/changed 4 sites in 2 files/);
     const after = await callTool("references", { symbol: "sum" });
     expect(after.match(/src\/(math|index)\.ts/g)?.length).toBe(4);
+  });
+
+  it("hover batch via `symbols` returns labeled sections in parallel", async () => {
+    const out = await callTool("hover", { symbols: ["sum", "double"] });
+    expect(out).toMatch(/=== sum ===/);
+    expect(out).toMatch(/=== double ===/);
+    expect(out).toMatch(/function sum/);
+    expect(out).toMatch(/function double/);
+  });
+
+  it("outline accepts files array and labels each file", async () => {
+    const out = await callTool("outline", {
+      files: [resolve(workspace, "src/math.ts"), resolve(workspace, "src/index.ts")],
+    });
+    expect(out).toMatch(/=== .*math\.ts ===/);
+    expect(out).toMatch(/=== .*index\.ts ===/);
+    expect(out).toMatch(/function sum/);
+  });
+
+  it("rename_file dry_run reports the move and the imports it would rewrite", async () => {
+    const out = await callTool("rename_file", {
+      old_path: resolve(workspace, "src/math.ts"),
+      new_path: resolve(workspace, "src/arithmetic.ts"),
+      dry_run: true,
+    });
+    expect(out).toMatch(/preview/);
+    expect(out).toMatch(/src\/math\.ts -> src\/arithmetic\.ts/);
+  });
+
+  it("rename_file applies the move and updates imports across the project", async () => {
+    const out = await callTool("rename_file", {
+      old_path: resolve(workspace, "src/math.ts"),
+      new_path: resolve(workspace, "src/arithmetic.ts"),
+    });
+    expect(out).toMatch(/moved 1 path/);
+    // After the move, `outline` on the new path should still find the symbols.
+    const outline = await callTool("outline", { file: resolve(workspace, "src/arithmetic.ts") });
+    expect(outline).toMatch(/function sum/);
   });
 });

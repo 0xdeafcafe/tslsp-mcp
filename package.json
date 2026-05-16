@@ -24,10 +24,12 @@
   ],
   "license": "MIT",
   "bin": {
-    "tslsp-mcp": "dist/index.js"
+    "tslsp-mcp": "dist/index.js",
+    "tslsp": "dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "skills"
   ],
   "scripts": {
     "build": "tsc",
