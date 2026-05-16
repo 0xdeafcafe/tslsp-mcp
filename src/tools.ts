@@ -329,12 +329,17 @@ const renameFile = defineTool({
       const newAbs = abs(new_path, ctx.cwd);
       const { client, root } = await ctx.pool.forFile(oldAbs);
       const summary = await performFileRename(client, root, oldAbs, newAbs, dry_run ?? false);
+      const moveWord = (n: number) => `${n} path${n === 1 ? "" : "s"}`;
+      const editWord = (n: number) => `${n} import${n === 1 ? "" : "s"}`;
+      const fileWord = (n: number) => `${n} file${n === 1 ? "" : "s"}`;
       const head = dry_run
-        ? `[preview] would move ${summary.moves.length} path${summary.moves.length === 1 ? "" : "s"}, update ${summary.edits_applied} import${summary.edits_applied === 1 ? "" : "s"} in ${summary.files_with_import_changes} file${summary.files_with_import_changes === 1 ? "" : "s"}`
-        : `moved ${summary.moves.length} path${summary.moves.length === 1 ? "" : "s"}, updated ${summary.edits_applied} import${summary.edits_applied === 1 ? "" : "s"} in ${summary.files_with_import_changes} file${summary.files_with_import_changes === 1 ? "" : "s"}`;
+        ? `[preview] would move ${moveWord(summary.moves.length)}, update ${editWord(summary.edits_applied)} in ${fileWord(summary.files_with_import_changes)}`
+        : `moved ${moveWord(summary.moves.length)}, updated ${editWord(summary.edits_applied)} in ${fileWord(summary.files_with_import_changes)}`;
       const moves = summary.moves.map((m) => `  ${m.from} -> ${m.to}`).join("\n");
-      const preview = summary.preview ? `\n${summary.preview}` : "";
-      return ok(`${head}\n${moves}${preview}`);
+      const importBlock = summary.import_files.length
+        ? `\nimport changes:\n${summary.import_files.map((f) => `  ${f}`).join("\n")}`
+        : "";
+      return ok(`${head}\n${moves}${importBlock}`);
     } catch (e) {
       return fail(String((e as Error).message ?? e));
     }
@@ -486,7 +491,7 @@ function callItemHeader(item: CallHierarchyItem, root: string): string {
 
 const codeAction = defineTool({
   name: "code_action",
-  description: "List or apply code actions (quick fixes, refactors, organize-imports) for a file or position. Pass apply=N (index) to apply.",
+  description: "List or apply code actions (quick fixes, refactors, organize-imports). `apply: N` applies an index from the most recent list — indices aren't stable across calls.",
   inputSchema: {
     file: z.string().describe("File path."),
     line: z.number().int().nonnegative().optional().describe("Zero-based line. Omit for whole-file actions."),
@@ -506,6 +511,9 @@ const codeAction = defineTool({
       const sc = character ?? 0;
       const el = end_line ?? sl;
       const ec = end_character ?? sc;
+      // Diagnostics arrive async after didOpen. Wait briefly so context-keyed
+      // quick-fixes (which depend on overlapping diagnostics) are surfaced.
+      await waitForDiagnostics(() => client.diagnosticsFor(uri), 2000);
       const diags = (client.diagnosticsFor(uri) ?? []).filter((d) => overlaps(d.range, sl, sc, el, ec));
       const result = (await client.request<(CodeAction & { command?: unknown })[] | null>(
         "textDocument/codeAction",
@@ -523,9 +531,28 @@ const codeAction = defineTool({
       if (apply !== undefined) {
         const target = actions[apply];
         if (!target) return fail(`no action at index ${apply} (have ${actions.length})`);
-        if (!target.edit) return fail(`action "${target.title}" has no edit attached`);
-        const summary = await applyWorkspaceEdit(client, target.edit, root);
-        return ok(`applied: ${target.title}\n${renderRenameSummary({ ...summary }, false)}`);
+        // LSP permits a server to omit `edit` and require `codeAction/resolve`
+        // before applying. tsgo sometimes does this for source actions.
+        let resolved: CodeAction = target;
+        if (!resolved.edit) {
+          try {
+            const r = await client.request<CodeAction | null>("codeAction/resolve", target);
+            if (r) resolved = r;
+          } catch {
+            // Fall through — we'll surface a clearer error if edit still missing.
+          }
+        }
+        if (resolved.edit) {
+          const summary = await applyWorkspaceEdit(client, resolved.edit, root);
+          return ok(`applied: ${resolved.title}\n${renderRenameSummary({ ...summary }, false)}`);
+        }
+        if (resolved.command) {
+          // Command-based actions are server-defined; without executeCommand
+          // support we can't run them in-process. Surface the command so the
+          // caller can choose a different action.
+          return fail(`action "${resolved.title}" is command-driven (${resolved.command.command}); not yet supported`);
+        }
+        return fail(`action "${resolved.title}" has no edit attached after resolve`);
       }
       return ok(formatCodeActions(actions));
     } catch (e) {
@@ -542,6 +569,10 @@ function overlaps(range: Diagnostic["range"], sl: number, sc: number, el: number
   return aStart <= bEnd && bStart <= aEnd;
 }
 
+// `ToolDef<any>` is intentional: each tool's handler is contravariant in its
+// input shape, so a `ToolDef<{query: ZodString}>` is not assignable to
+// `ToolDef<ZodRawShape>`. The `defineTool` helper still gives each individual
+// declaration full per-tool type-checking — `any` only widens the array slot.
 export const TOOLS: ToolDef<any>[] = [
   findSymbol,
   references,

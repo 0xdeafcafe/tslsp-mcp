@@ -9,7 +9,8 @@ export interface FileRenameSummary {
   moves: { from: string; to: string }[];
   edits_applied: number;
   files_with_import_changes: number;
-  preview?: string;
+  /** Relative paths of files whose imports were (or would be) rewritten. */
+  import_files: string[];
 }
 
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", "out", ".git", ".next", ".turbo", "coverage"]);
@@ -73,17 +74,32 @@ export async function getWillRenameEdit(
 }
 
 /** Move file/folder on disk. Creates the parent directory of the destination
- * if needed. Returns nothing — throws on collision (destination exists). */
+ * if needed. Throws on collision (destination already exists) except when the
+ * "collision" is the same inode as the source on a case-insensitive
+ * filesystem — that's a case-only rename, which we route via a tmp name so
+ * APFS/NTFS don't refuse it. */
 export async function moveOnDisk(oldPath: string, newPath: string): Promise<void> {
   const oldAbs = resolve(oldPath);
   const newAbs = resolve(newPath);
+  if (oldAbs === newAbs) return; // no-op
+  await mkdir(dirname(newAbs), { recursive: true });
+
+  const caseOnly = oldAbs.toLowerCase() === newAbs.toLowerCase() && oldAbs !== newAbs;
+  if (caseOnly) {
+    // On case-insensitive FS the destination "exists" because it IS the source.
+    // Do a two-step rename via a sibling tmp name.
+    const tmp = `${oldAbs}.tslsp-rename-${process.pid}-${Date.now()}`;
+    await fsRename(oldAbs, tmp);
+    await fsRename(tmp, newAbs);
+    return;
+  }
+
   try {
     await stat(newAbs);
     throw new Error(`destination already exists: ${newAbs}`);
   } catch (e: any) {
     if (e?.code !== "ENOENT") throw e;
   }
-  await mkdir(dirname(newAbs), { recursive: true });
   await fsRename(oldAbs, newAbs);
 }
 
@@ -102,14 +118,14 @@ export async function performFileRename(
 
   const edit = await getWillRenameEdit(client, renames);
   const editsApplied = edit ? countEdits(edit) : 0;
-  const filesWithImportChanges = edit ? countFiles(edit) : 0;
+  const importFiles = edit ? listEditFiles(edit, root) : [];
 
   if (dryRun) {
     return {
       moves,
       edits_applied: editsApplied,
-      files_with_import_changes: filesWithImportChanges,
-      preview: edit ? previewEdit(edit, root) : undefined,
+      files_with_import_changes: importFiles.length,
+      import_files: importFiles,
     };
   }
 
@@ -120,7 +136,8 @@ export async function performFileRename(
   return {
     moves,
     edits_applied: editsApplied,
-    files_with_import_changes: filesWithImportChanges,
+    files_with_import_changes: importFiles.length,
+    import_files: importFiles,
   };
 }
 
@@ -131,16 +148,9 @@ function countEdits(edit: WorkspaceEdit): number {
   return n;
 }
 
-function countFiles(edit: WorkspaceEdit): number {
+function listEditFiles(edit: WorkspaceEdit, root: string): string[] {
   const uris = new Set<string>();
   if (edit.changes) for (const u of Object.keys(edit.changes)) uris.add(u);
   if (edit.documentChanges) for (const dc of edit.documentChanges) uris.add(dc.textDocument.uri);
-  return uris.size;
-}
-
-function previewEdit(edit: WorkspaceEdit, root: string): string {
-  const files: string[] = [];
-  if (edit.changes) for (const u of Object.keys(edit.changes)) files.push(uriToRel(u, root));
-  if (edit.documentChanges) for (const dc of edit.documentChanges) files.push(uriToRel(dc.textDocument.uri, root));
-  return files.map((f) => `  ${f}`).join("\n");
+  return [...uris].map((u) => uriToRel(u, root)).sort();
 }
