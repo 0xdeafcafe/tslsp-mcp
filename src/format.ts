@@ -1,7 +1,16 @@
 import { readFile } from "node:fs/promises";
 import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Diagnostic, DocumentSymbol, Hover, Location } from "./lsp-client.js";
+import {
+  CallHierarchyIncomingCall,
+  CallHierarchyItem,
+  CallHierarchyOutgoingCall,
+  CodeAction,
+  Diagnostic,
+  DocumentSymbol,
+  Hover,
+  Location,
+} from "./lsp-client.js";
 
 const SNIPPET_MAX = 120;
 
@@ -102,4 +111,43 @@ export function formatDiagnostic(d: Diagnostic, rel: string): string {
   const col = d.range.start.character + 1;
   const code = d.code !== undefined ? ` (${d.code})` : "";
   return `${rel}:${line}:${col} [${sev}]${code} ${d.message.replace(/\n/g, " ")}`;
+}
+
+function callItemLabel(item: CallHierarchyItem, root: string): string {
+  const rel = uriToRel(item.uri, root);
+  const line = item.selectionRange.start.line + 1;
+  return `${rel}:${line}  ${kindName(item.kind)} ${item.name}`;
+}
+
+export function formatCallHierarchyIncoming(calls: CallHierarchyIncomingCall[], root: string): string {
+  if (!calls.length) return "no callers";
+  return calls
+    .map((c) => {
+      const ranges = c.fromRanges.map((r) => r.start.line + 1).slice(0, 5).join(",");
+      const extra = c.fromRanges.length > 5 ? `,+${c.fromRanges.length - 5}` : "";
+      return `${callItemLabel(c.from, root)}  (calls@${ranges}${extra})`;
+    })
+    .join("\n");
+}
+
+export function formatCallHierarchyOutgoing(calls: CallHierarchyOutgoingCall[], root: string): string {
+  if (!calls.length) return "no callees";
+  return calls
+    .map((c) => {
+      const ranges = c.fromRanges.map((r) => r.start.line + 1).slice(0, 5).join(",");
+      const extra = c.fromRanges.length > 5 ? `,+${c.fromRanges.length - 5}` : "";
+      return `${callItemLabel(c.to, root)}  (from@${ranges}${extra})`;
+    })
+    .join("\n");
+}
+
+export function formatCodeActions(actions: CodeAction[]): string {
+  if (!actions.length) return "no code actions";
+  return actions
+    .map((a, i) => {
+      const kind = a.kind ? ` [${a.kind}]` : "";
+      const pref = a.isPreferred ? " *" : "";
+      return `${i}: ${a.title}${kind}${pref}`;
+    })
+    .join("\n");
 }
